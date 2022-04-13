@@ -45,15 +45,20 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import io.flutter.plugin.common.MethodChannel;
+import okhttp3.ConnectionSpec;
 import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -75,10 +80,36 @@ public class InAppWebViewClient extends WebViewClient {
 
         this.channel = channel;
         this.inAppBrowserDelegate = inAppBrowserDelegate;
-        httpClient = TlsSocketFactory.Companion.createOkhttpClientBuilderWithTlsConfig()
-                .followRedirects(false)
-                .followSslRedirects(false)
-                .build();
+        try {
+            httpClient = InAppWebViewClient.createOkhttpClientBuilderWithTlsConfig()
+                    .followRedirects(false)
+                    .followSslRedirects(false)
+                    .build();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    static private OkHttpClient.Builder createOkhttpClientBuilderWithTlsConfig() throws Exception {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+
+        TrustManagerFactory trustManager = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        trustManager.init((KeyStore) null);
+
+        X509TrustManager x509manager = (X509TrustManager) trustManager.getTrustManagers()[0];
+        SSLContext tls11 = SSLContext.getInstance(TlsVersion.TLS_1_1.javaName());
+        tls11.init(null, null, null);
+
+        builder.sslSocketFactory(new TlsSocketFactory(tls11.getSocketFactory()), x509manager);
+
+        ConnectionSpec cs = new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS).tlsVersions(TlsSocketFactory.ALLOWED_TLS_VERSIONS).build();
+        List<ConnectionSpec> specs = new ArrayList();
+        specs.add(cs);
+        specs.add(ConnectionSpec.COMPATIBLE_TLS);
+        specs.add(ConnectionSpec.CLEARTEXT);
+
+        builder.connectionSpecs(specs);
+        return builder;
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
