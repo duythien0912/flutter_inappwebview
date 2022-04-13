@@ -297,7 +297,7 @@ class InAppWebViewController {
         break;
       case "shouldInterceptResponse":
         if ((_webview != null &&
-                _webview!.androidShouldInterceptRequest != null) ||
+                _webview!.androidShouldInterceptResponse != null) ||
             _inAppBrowser != null) {
           Map<String, dynamic> arguments =
               call.arguments.cast<String, dynamic>();
