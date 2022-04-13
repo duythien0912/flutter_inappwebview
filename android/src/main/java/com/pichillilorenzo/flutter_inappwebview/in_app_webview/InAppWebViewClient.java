@@ -45,10 +45,13 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
+
+import javax.net.ssl.SSLContext;
 
 import io.flutter.plugin.common.MethodChannel;
 import okhttp3.Headers;
@@ -56,6 +59,7 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.TlsVersion;
 
 public class InAppWebViewClient extends WebViewClient {
 
@@ -71,7 +75,7 @@ public class InAppWebViewClient extends WebViewClient {
 
         this.channel = channel;
         this.inAppBrowserDelegate = inAppBrowserDelegate;
-        httpClient = new OkHttpClient.Builder()
+        httpClient = TlsSocketFactory.Companion.createOkhttpClientBuilderWithTlsConfig()
                 .followRedirects(false)
                 .followSslRedirects(false)
                 .build();
@@ -695,18 +699,14 @@ public class InAppWebViewClient extends WebViewClient {
         String url = request instanceof String ? (String) request : null;
         String method = "GET";
         Map<String, String> headers = null;
-        boolean hasGesture = false;
         boolean isForMainFrame = true;
-        boolean isRedirect = false;
 
         if (request instanceof WebResourceRequest) {
             WebResourceRequest webResourceRequest = (WebResourceRequest) request;
             url = webResourceRequest.getUrl().toString();
             method = webResourceRequest.getMethod();
             headers = webResourceRequest.getRequestHeaders();
-            hasGesture = webResourceRequest.hasGesture();
             isForMainFrame = webResourceRequest.isForMainFrame();
-            isRedirect = webResourceRequest.isRedirect();
         }
 
         // Only for BitizenWallet :: Start
