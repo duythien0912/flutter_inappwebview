@@ -7,7 +7,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -397,7 +396,7 @@ void main() {
       late File fileJs;
 
       setUpAll(() async {
-        appSupportDir = (await getApplicationSupportDirectory())!;
+        appSupportDir = (await getApplicationSupportDirectory());
 
         final Directory htmlFolder = Directory('${appSupportDir.path}/html/');
         if (!await htmlFolder.exists()) {
@@ -1345,9 +1344,9 @@ void main() {
         // blocked. Still wait for a potential page change for some time in order
         // to give the test a chance to fail.
         await pageLoads.stream
-            .map((event) => event as String?)
+            .map((event) => event)
             .first
-            .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+            .timeout(const Duration(milliseconds: 500), onTimeout: () => "");
         String? currentUrl = (await controller.getUrl())?.toString();
         expect(currentUrl, isNot('https://www.google.com/'));
 
@@ -1402,9 +1401,9 @@ void main() {
         // blocked. Still wait for a potential page change for some time in order
         // to give the test a chance to fail.
         await pageLoads.stream
-            .map((event) => event as String?)
+            .map((event) => event)
             .first
-            .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+            .timeout(const Duration(milliseconds: 500), onTimeout: () => "");
         final String? currentUrl = (await controller.getUrl())?.toString();
         expect(currentUrl, isNot(contains('youtube.com')));
 
@@ -3307,6 +3306,7 @@ setTimeout(function() {
             },
             androidOnPermissionRequest: (controller, origin, resources) async {
               onPermissionRequestCompleter.complete(resources);
+              return null;
             },
           ),
         ),
@@ -3480,6 +3480,7 @@ setTimeout(function() {
             androidOnJsBeforeUnload: (controller, jsBeforeUnloadRequest) async {
               onJsBeforeUnloadCompleter
                   .complete(jsBeforeUnloadRequest.url.toString());
+              return null;
             },
           ),
         ),
@@ -4853,7 +4854,7 @@ setTimeout(function() {
         fileName = fileName + WebArchiveFormat.WEBARCHIVE.toValue();
       }
 
-      var fullPath = supportDir!.path + Platform.pathSeparator + fileName;
+      var fullPath = supportDir.path + Platform.pathSeparator + fileName;
       var path = await controller.saveWebArchive(filePath: fullPath);
       expect(path, isNotNull);
       expect(path, endsWith(fileName));
@@ -5400,6 +5401,7 @@ setTimeout(function() {
               },
               onJsAlert: (controller, jsAlertRequest) async {
                 alertMessageCompleter.complete(jsAlertRequest.message);
+                return null;
               },
             ),
           ),
