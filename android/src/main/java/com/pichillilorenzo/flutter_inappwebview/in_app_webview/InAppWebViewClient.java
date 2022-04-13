@@ -764,15 +764,15 @@ public class InAppWebViewClient extends WebViewClient {
             obj.put("contentEncoding", contentType.charset().toString());
             obj.put("data", response.body().bytes());
             obj.put("headers", respHeaders);
-            obj.put("statusCode", response.code());
+            obj.put("url", url);
             if (!response.isSuccessful()) {
+                obj.put("statusCode", response.code());
                 if (!response.message().equals("")) {
                     obj.put("reasonPhrase", response.message());
                 } else {
                     obj.put("reasonPhrase", "HTTP " + response.code());
                 }
             }
-            obj.put("url", url);
             flutterResult = Util.invokeMethodAndWait(channel, "shouldInterceptResponse", obj);
         } catch (Exception e) {
             e.printStackTrace();
