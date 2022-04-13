@@ -763,7 +763,9 @@ public class InAppWebViewClient extends WebViewClient {
             obj.put("contentType", contentType.type() + "/" + contentType.subtype());
             obj.put("contentEncoding", contentType.charset().toString());
             obj.put("data", response.body().bytes());
-            obj.put("headers", respHeaders);
+            if (!respHeaders.isEmpty()) {
+                obj.put("headers", respHeaders);
+            }
             obj.put("url", url);
             if (!response.isSuccessful()) {
                 obj.put("statusCode", response.code());
@@ -804,13 +806,23 @@ public class InAppWebViewClient extends WebViewClient {
             String contentType = (String) res.get("contentType");
             String contentEncoding = (String) res.get("contentEncoding");
             byte[] data = (byte[]) res.get("data");
-            Map<String, String> responseHeaders = (Map<String, String>) res.get("headers");
-            Integer statusCode = (Integer) res.get("statusCode");
-            String reasonPhrase = (String) res.get("reasonPhrase");
+
+            Map<String, String> responseHeaders = null;
+            if (res.get("headers") != null) {
+                responseHeaders = (Map<String, String>) res.get("headers");
+            }
+            Integer statusCode = null;
+            if (res.get("statusCode") != null) {
+                statusCode = (Integer) res.get("statusCode");
+            }
+            String reasonPhrase = null;
+            if (res.get("reasonPhrase") != null) {
+                reasonPhrase = (String) res.get("reasonPhrase");
+            }
 
             ByteArrayInputStream inputStream = (data != null) ? new ByteArrayInputStream(data) : null;
 
-            if ((responseHeaders == null && statusCode == null && reasonPhrase == null) || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            if (responseHeaders == null && statusCode == null && reasonPhrase == null) {
                 return new WebResourceResponse(contentType, contentEncoding, inputStream);
             } else {
                 return new WebResourceResponse(contentType, contentEncoding, statusCode, reasonPhrase, responseHeaders, inputStream);
