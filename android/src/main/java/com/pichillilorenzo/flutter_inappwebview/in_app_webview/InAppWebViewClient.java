@@ -733,6 +733,8 @@ public class InAppWebViewClient extends WebViewClient {
             obj.put("contentEncoding", contentType.charset().toString());
             obj.put("data", response.body().bytes());
             obj.put("headers", respHeaders);
+            obj.put("statusCode", response.code());
+            obj.put("reasonPhrase", response.message());
             obj.put("url", url);
             flutterResult = Util.invokeMethodAndWait(channel, "shouldInterceptResponse", obj);
         } catch (Exception e) {
