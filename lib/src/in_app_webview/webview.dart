@@ -489,6 +489,10 @@ abstract class WebView {
           InAppWebViewController controller, WebResourceRequest request)?
       androidShouldInterceptRequest;
 
+  final Future<WebResourceResponse?> Function(
+          InAppWebViewController controller, WebResourceResponse response)?
+      androidShouldInterceptResponse;
+
   ///Event called when the renderer currently associated with the WebView becomes unresponsive as a result of a long running blocking task such as the execution of JavaScript.
   ///
   ///If a WebView fails to process an input event, or successfully navigate to a new URL within a reasonable time frame, the renderer is considered to be unresponsive, and this callback will be called.
@@ -717,6 +721,7 @@ abstract class WebView {
       this.androidOnGeolocationPermissionsShowPrompt,
       this.androidOnGeolocationPermissionsHidePrompt,
       this.androidShouldInterceptRequest,
+      this.androidShouldInterceptResponse,
       this.androidOnRenderProcessGone,
       this.androidOnRenderProcessResponsive,
       this.androidOnRenderProcessUnresponsive,

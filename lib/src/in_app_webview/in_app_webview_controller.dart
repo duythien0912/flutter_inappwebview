@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -294,6 +293,24 @@ class InAppWebViewController {
           else
             return (await _inAppBrowser!.androidShouldInterceptRequest(request))
                 ?.toMap();
+        }
+        break;
+      case "shouldInterceptResponse":
+        if ((_webview != null &&
+                _webview!.androidShouldInterceptRequest != null) ||
+            _inAppBrowser != null) {
+          Map<String, dynamic> arguments =
+              call.arguments.cast<String, dynamic>();
+          WebResourceResponse response =
+              WebResourceResponse.fromMap(arguments)!;
+
+          if (_webview != null &&
+              _webview!.androidShouldInterceptResponse != null)
+            return (await _webview!.androidShouldInterceptResponse!(
+                    this, response))
+                ?.toMap();
+          else
+            return response;
         }
         break;
       case "onRenderProcessUnresponsive":

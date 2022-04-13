@@ -39,15 +39,23 @@ import com.pichillilorenzo.flutter_inappwebview.types.URLProtectionSpace;
 import com.pichillilorenzo.flutter_inappwebview.types.URLRequest;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 
 import io.flutter.plugin.common.MethodChannel;
+import okhttp3.Headers;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class InAppWebViewClient extends WebViewClient {
 
@@ -56,12 +64,17 @@ public class InAppWebViewClient extends WebViewClient {
     private final MethodChannel channel;
     private static int previousAuthRequestFailureCount = 0;
     private static List<URLCredential> credentialsProposed = null;
+    protected static OkHttpClient httpClient;
 
     public InAppWebViewClient(MethodChannel channel, InAppBrowserDelegate inAppBrowserDelegate) {
         super();
 
         this.channel = channel;
         this.inAppBrowserDelegate = inAppBrowserDelegate;
+        httpClient = new OkHttpClient.Builder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build();
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
@@ -664,7 +677,6 @@ public class InAppWebViewClient extends WebViewClient {
         return response;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
     public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
         final InAppWebView webView = (InAppWebView) view;
@@ -687,33 +699,63 @@ public class InAppWebViewClient extends WebViewClient {
         boolean isForMainFrame = true;
         boolean isRedirect = false;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request instanceof WebResourceRequest) {
+        if (request instanceof WebResourceRequest) {
             WebResourceRequest webResourceRequest = (WebResourceRequest) request;
             url = webResourceRequest.getUrl().toString();
             method = webResourceRequest.getMethod();
             headers = webResourceRequest.getRequestHeaders();
             hasGesture = webResourceRequest.hasGesture();
             isForMainFrame = webResourceRequest.isForMainFrame();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                isRedirect = webResourceRequest.isRedirect();
-            }
+            isRedirect = webResourceRequest.isRedirect();
         }
 
-        final Map<String, Object> obj = new HashMap<>();
-        obj.put("url", url);
-        obj.put("method", method);
-        obj.put("headers", headers);
-        obj.put("isForMainFrame", isForMainFrame);
-        obj.put("hasGesture", hasGesture);
-        obj.put("isRedirect", isRedirect);
-
+        // Only for BitizenWallet :: Start
+        if (!isForMainFrame || !method.equals("GET")) return null;
         Util.WaitFlutterResult flutterResult;
+        Request req = new Request.Builder()
+                .method(method, null)
+                .url(url)
+                .headers(Headers.of(headers))
+                .build();
         try {
-            flutterResult = Util.invokeMethodAndWait(channel, "shouldInterceptRequest", obj);
-        } catch (InterruptedException e) {
+            Response response = httpClient.newCall(req).execute();
+
+            // https://developer.android.com/reference/android/webkit/WebResourceResponse 3xx is not supported
+            if (response.isRedirect()) return null;
+
+            MediaType contentType = response.body().contentType();
+            Map<String, String> respHeaders = new HashMap<>();
+            for (Map.Entry<String, List<String>> entry : response.headers().toMultimap().entrySet()) {
+                respHeaders.put(entry.getKey(), String.join("; ", entry.getValue()));
+            }
+            final Map<String, Object> obj = new HashMap<>();
+            obj.put("contentType", contentType.type() + "/" + contentType.subtype());
+            obj.put("contentEncoding", contentType.charset().toString());
+            obj.put("data", response.body().bytes());
+            obj.put("headers", respHeaders);
+            flutterResult = Util.invokeMethodAndWait(channel, "shouldInterceptResponse", obj);
+        } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
+        // Only for BitizenWallet :: End
+
+
+//        final Map<String, Object> obj = new HashMap<>();
+//        obj.put("url", url);
+//        obj.put("method", method);
+//        obj.put("headers", headers);
+//        obj.put("isForMainFrame", isForMainFrame);
+//        obj.put("hasGesture", hasGesture);
+//        obj.put("isRedirect", isRedirect);
+
+//        Util.WaitFlutterResult flutterResult;
+//        try {
+//            flutterResult = Util.invokeMethodAndWait(channel, "shouldInterceptRequest", obj);
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//            return null;
+//        }
 
         if (flutterResult.error != null) {
             Log.e(LOG_TAG, flutterResult.error);

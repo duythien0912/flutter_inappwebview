@@ -10,14 +10,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import '../context_menu.dart';
-import '../types.dart';
-
-import 'webview.dart';
-import 'in_app_webview_controller.dart';
-import 'in_app_webview_options.dart';
-import '../pull_to_refresh/pull_to_refresh_controller.dart';
-
 ///Flutter Widget for adding an **inline native WebView** integrated in the flutter widget tree.
 class InAppWebView extends StatefulWidget implements WebView {
   /// `gestureRecognizers` specifies which gestures should be consumed by the WebView.
@@ -83,6 +75,7 @@ class InAppWebView extends StatefulWidget implements WebView {
     this.androidOnGeolocationPermissionsShowPrompt,
     this.androidOnGeolocationPermissionsHidePrompt,
     this.androidShouldInterceptRequest,
+    this.androidShouldInterceptResponse,
     this.androidOnRenderProcessGone,
     this.androidOnRenderProcessResponsive,
     this.androidOnRenderProcessUnresponsive,
@@ -323,6 +316,11 @@ class InAppWebView extends StatefulWidget implements WebView {
   final Future<WebResourceResponse?> Function(
           InAppWebViewController controller, WebResourceRequest request)?
       androidShouldInterceptRequest;
+
+  @override
+  final Future<WebResourceResponse?> Function(
+          InAppWebViewController controller, WebResourceResponse request)?
+      androidShouldInterceptResponse;
 
   @override
   final Future<WebViewRenderProcessAction?> Function(

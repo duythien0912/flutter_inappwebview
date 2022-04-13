@@ -93,6 +93,7 @@ class HeadlessInAppWebView implements WebView {
       this.androidOnGeolocationPermissionsShowPrompt,
       this.androidOnGeolocationPermissionsHidePrompt,
       this.androidShouldInterceptRequest,
+      this.androidShouldInterceptResponse,
       this.androidOnRenderProcessGone,
       this.androidOnRenderProcessResponsive,
       this.androidOnRenderProcessUnresponsive,
@@ -411,6 +412,11 @@ class HeadlessInAppWebView implements WebView {
   Future<WebResourceResponse?> Function(
           InAppWebViewController controller, WebResourceRequest request)?
       androidShouldInterceptRequest;
+
+  @override
+  Future<WebResourceResponse?> Function(
+          InAppWebViewController controller, WebResourceResponse request)?
+      androidShouldInterceptResponse;
 
   @override
   Future<WebViewRenderProcessAction?> Function(

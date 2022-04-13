@@ -1,5 +1,4 @@
 import 'dart:collection';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:ui';
@@ -305,13 +304,32 @@ class WebResourceResponse {
   ///**NOTE**: available on Android 21+. For Android < 21 it won't be used.
   String? reasonPhrase;
 
+  String? url;
+
   WebResourceResponse(
       {this.contentType = "",
       this.contentEncoding = "utf-8",
       this.data,
       this.headers,
       this.statusCode,
-      this.reasonPhrase});
+      this.reasonPhrase,
+      this.url});
+
+  static WebResourceResponse? fromMap(Map<String, dynamic>? map) {
+    if (map == null) {
+      return null;
+    }
+
+    return WebResourceResponse(
+      contentType: map["contentType"],
+      contentEncoding: map["contentEncoding"],
+      data: map["data"],
+      headers: map["headers"]?.cast<String, String>(),
+      statusCode: map["statusCode"],
+      reasonPhrase: map["reasonPhrase"],
+      url: map["url"],
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
