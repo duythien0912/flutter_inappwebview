@@ -80,14 +80,16 @@ public class InAppWebViewClient extends WebViewClient {
 
         this.channel = channel;
         this.inAppBrowserDelegate = inAppBrowserDelegate;
-        try {
-            httpClient = InAppWebViewClient.createOkhttpClientBuilderWithTlsConfig()
-                    .followRedirects(false)
-                    .followSslRedirects(false)
-                    .build();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+
+        httpClient = new OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).build();
+//        try {
+//            httpClient = InAppWebViewClient.createOkhttpClientBuilderWithTlsConfig()
+//                    .followRedirects(false)
+//                    .followSslRedirects(false)
+//                    .build();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
     }
 
     static private OkHttpClient.Builder createOkhttpClientBuilderWithTlsConfig() throws Exception {
@@ -738,6 +740,10 @@ public class InAppWebViewClient extends WebViewClient {
             method = webResourceRequest.getMethod();
             headers = webResourceRequest.getRequestHeaders();
             isForMainFrame = webResourceRequest.isForMainFrame();
+        }
+
+        if (!headers.containsKey("Cookie")) {
+            headers.put("Cookie", CookieManager.getInstance().getCookie(url));
         }
 
         // Only for BitizenWallet :: Start
