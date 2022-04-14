@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 
 import javax.net.ssl.SSLContext;
@@ -721,8 +722,7 @@ public class InAppWebViewClient extends WebViewClient {
         String url = request.getUrl().toString();
 
         if (webView.options.useShouldInterceptRequest) {
-            WebResourceResponse onShouldInterceptResponse = onShouldInterceptRequest(request);
-            return onShouldInterceptResponse;
+            return onShouldInterceptRequest(request);
         }
 
         return shouldInterceptRequest(view, url);
@@ -743,6 +743,7 @@ public class InAppWebViewClient extends WebViewClient {
         }
 
         // Only for BitizenWallet :: Start
+        if (url == null) return null;
         if (headers == null) {
             headers = new HashMap<>();
         }
@@ -764,15 +765,18 @@ public class InAppWebViewClient extends WebViewClient {
 
             // https://developer.android.com/reference/android/webkit/WebResourceResponse 3xx is not supported
             if (response.isRedirect()) return null;
+            if (response.body() == null) return null;
 
             MediaType contentType = response.body().contentType();
+            if (contentType == null) return null;
+
             Map<String, String> respHeaders = new HashMap<>();
             for (Map.Entry<String, List<String>> entry : response.headers().toMultimap().entrySet()) {
                 respHeaders.put(entry.getKey(), String.join("; ", entry.getValue()));
             }
             final Map<String, Object> obj = new HashMap<>();
             obj.put("contentType", contentType.type() + "/" + contentType.subtype());
-            obj.put("contentEncoding", contentType.charset().toString());
+            obj.put("contentEncoding", (contentType.charset() == null ? StandardCharsets.UTF_8 : contentType.charset())).toString();
             obj.put("data", response.body().bytes());
             if (!respHeaders.isEmpty()) {
                 obj.put("headers", respHeaders);
