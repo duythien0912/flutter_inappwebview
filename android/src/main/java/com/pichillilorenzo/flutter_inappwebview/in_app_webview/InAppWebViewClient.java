@@ -768,18 +768,9 @@ public class InAppWebViewClient extends WebViewClient {
             if (response.body() == null) return null;
 
             String rawContentType = response.header("content-type") == null ? response.header("Content-Type") : response.header("content-type");
-            String charsetString = "";
-            String contentTypeString = StandardCharsets.UTF_8.toString();
-            if (rawContentType == null) {
-                MediaType contentType = response.body().contentType();
-                if (contentType != null) {
-                    contentTypeString = contentType.type() + "/" + contentType.subtype();
-                    Charset charset = contentType.charset();
-                    if (charset != null) {
-                        contentTypeString = charset.toString();
-                    }
-                }
-            } else {
+            String contentTypeString = "";
+            String charsetString = StandardCharsets.UTF_8.toString();
+            if (rawContentType != null) {
                 String[] splitContentType = rawContentType.split(";");
                 if (splitContentType.length > 0) {
                     contentTypeString = splitContentType[0];
@@ -787,7 +778,17 @@ public class InAppWebViewClient extends WebViewClient {
                 if (splitContentType.length > 1) {
                     String[] splitContentEncoding = splitContentType[1].split("=");
                     if (splitContentEncoding.length > 1) {
-                        contentTypeString = splitContentEncoding[1];
+                        charsetString = splitContentEncoding[1];
+                    }
+                }
+            }
+            if (contentTypeString.isEmpty()) {
+                MediaType contentType = response.body().contentType();
+                if (contentType != null) {
+                    contentTypeString = contentType.type() + "/" + contentType.subtype();
+                    Charset charset = contentType.charset();
+                    if (charset != null) {
+                        contentTypeString = charset.toString();
                     }
                 }
             }
