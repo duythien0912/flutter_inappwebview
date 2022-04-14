@@ -742,11 +742,16 @@ public class InAppWebViewClient extends WebViewClient {
             isForMainFrame = webResourceRequest.isForMainFrame();
         }
 
-        if (!headers.containsKey("Cookie")) {
-            headers.put("Cookie", CookieManager.getInstance().getCookie(url));
-        }
-
         // Only for BitizenWallet :: Start
+        if (headers == null) {
+            headers = new HashMap<>();
+        }
+        if (!headers.containsKey("Cookie")) {
+            final String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && cookie.trim().length() > 0) {
+                headers.put("Cookie", cookie);
+            }
+        }
         if (!isForMainFrame || !method.equals("GET")) return null;
         Util.WaitFlutterResult flutterResult;
         Request req = new Request.Builder()
