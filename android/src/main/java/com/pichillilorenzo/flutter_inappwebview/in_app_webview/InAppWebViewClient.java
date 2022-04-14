@@ -767,16 +767,38 @@ public class InAppWebViewClient extends WebViewClient {
             if (response.isRedirect()) return null;
             if (response.body() == null) return null;
 
-            MediaType contentType = response.body().contentType();
-            if (contentType == null) return null;
+            String rawContentType = response.header("content-type") == null ? response.header("Content-Type") : response.header("content-type");
+            String charsetString = "";
+            String contentTypeString = StandardCharsets.UTF_8.toString();
+            if (rawContentType == null) {
+                MediaType contentType = response.body().contentType();
+                if (contentType != null) {
+                    contentTypeString = contentType.type() + "/" + contentType.subtype();
+                    Charset charset = contentType.charset();
+                    if (charset != null) {
+                        contentTypeString = charset.toString();
+                    }
+                }
+            } else {
+                String[] splitContentType = rawContentType.split(";");
+                if (splitContentType.length > 0) {
+                    contentTypeString = splitContentType[0];
+                }
+                if (splitContentType.length > 1) {
+                    String[] splitContentEncoding = splitContentType[1].split("=");
+                    if (splitContentEncoding.length > 1) {
+                        contentTypeString = splitContentEncoding[1];
+                    }
+                }
+            }
 
             Map<String, String> respHeaders = new HashMap<>();
             for (Map.Entry<String, List<String>> entry : response.headers().toMultimap().entrySet()) {
                 respHeaders.put(entry.getKey(), String.join("; ", entry.getValue()));
             }
             final Map<String, Object> obj = new HashMap<>();
-            obj.put("contentType", contentType.type() + "/" + contentType.subtype());
-            obj.put("contentEncoding", (contentType.charset() == null ? StandardCharsets.UTF_8 : contentType.charset())).toString();
+            obj.put("contentType", contentTypeString);
+            obj.put("contentEncoding", charsetString);
             obj.put("data", response.body().bytes());
             if (!respHeaders.isEmpty()) {
                 obj.put("headers", respHeaders);
