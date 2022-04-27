@@ -6,10 +6,11 @@ import android.net.Uri;
 import android.os.Build;
 import android.webkit.ValueCallback;
 
+import androidx.annotation.Nullable;
+
 import com.pichillilorenzo.flutter_inappwebview.chrome_custom_tabs.ChromeSafariBrowserManager;
 import com.pichillilorenzo.flutter_inappwebview.credential_database.CredentialDatabaseHandler;
 import com.pichillilorenzo.flutter_inappwebview.in_app_browser.InAppBrowserManager;
-import com.pichillilorenzo.flutter_inappwebview.in_app_webview.FlutterWebViewFactory;
 import com.pichillilorenzo.flutter_inappwebview.headless_in_app_webview.HeadlessInAppWebViewManager;
 
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -42,7 +43,9 @@ public class InAppWebViewFlutterPlugin implements FlutterPlugin, ActivityAware {
   public PluginRegistry.Registrar registrar;
   public BinaryMessenger messenger;
   public FlutterPlugin.FlutterAssets flutterAssets;
+  @Nullable
   public ActivityPluginBinding activityPluginBinding;
+  @Nullable
   public Activity activity;
   @SuppressWarnings("deprecation")
   public FlutterView flutterView;

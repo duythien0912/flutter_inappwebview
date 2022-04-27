@@ -22,6 +22,7 @@ import com.pichillilorenzo.flutter_inappwebview.InAppWebViewMethodHandler;
 import com.pichillilorenzo.flutter_inappwebview.plugin_scripts_js.JavaScriptBridgeJS;
 import com.pichillilorenzo.flutter_inappwebview.pull_to_refresh.PullToRefreshLayout;
 import com.pichillilorenzo.flutter_inappwebview.pull_to_refresh.PullToRefreshOptions;
+import com.pichillilorenzo.flutter_inappwebview.types.PlatformWebView;
 import com.pichillilorenzo.flutter_inappwebview.types.URLRequest;
 import com.pichillilorenzo.flutter_inappwebview.types.UserScript;
 
@@ -32,9 +33,8 @@ import java.util.List;
 import java.util.Map;
 
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugin.platform.PlatformView;
 
-public class FlutterWebView implements PlatformView {
+public class FlutterWebView implements PlatformWebView {
 
   static final String LOG_TAG = "IAWFlutterWebView";
 
@@ -60,7 +60,7 @@ public class FlutterWebView implements PlatformView {
     InAppWebViewOptions options = new InAppWebViewOptions();
     options.parse(initialOptions);
 
-    if (plugin.activity == null) {
+    if (plugin == null || plugin.activity == null) {
       Log.e(LOG_TAG, "\n\n\nERROR: You need to upgrade your Flutter project to use the new Java Embedding API:\n\n" +
               "- Take a look at the \"IMPORTANT Note for Android\" section here: https://github.com/pichillilorenzo/flutter_inappwebview#important-note-for-android\n" +
               "- See the official wiki here: https://github.com/flutter/flutter/wiki/Upgrading-pre-1.12-Android-projects\n\n\n");

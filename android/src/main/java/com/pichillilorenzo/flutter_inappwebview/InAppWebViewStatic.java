@@ -79,7 +79,7 @@ public class InAppWebViewStatic implements MethodChannel.MethodCallHandler {
           result.success(false);
         break;
       case "getCurrentWebViewPackage":
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && plugin != null && plugin.activity != null) {
           result.success(convertWebViewPackageToMap(WebViewCompat.getCurrentWebViewPackage(plugin.activity)));
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
           //with Android Lollipop (API 21) they started to update the WebView
@@ -99,9 +99,11 @@ public class InAppWebViewStatic implements MethodChannel.MethodCallHandler {
         }
         break;
       case "setWebContentsDebuggingEnabled":
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+        {
           boolean debuggingEnabled = (boolean) call.argument("debuggingEnabled");
-          WebView.setWebContentsDebuggingEnabled(debuggingEnabled);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(debuggingEnabled);
+          }
         }
         result.success(true);
         break;

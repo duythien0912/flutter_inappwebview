@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.drawable.ColorDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,7 +23,6 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.ActionMode;
 import android.view.ContextMenu;
-import android.view.DragEvent;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -37,6 +37,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebBackForwardList;
 import android.webkit.WebHistoryItem;
@@ -73,6 +74,8 @@ import com.pichillilorenzo.flutter_inappwebview.plugin_scripts_js.PrintJS;
 import com.pichillilorenzo.flutter_inappwebview.plugin_scripts_js.PromisePolyfillJS;
 import com.pichillilorenzo.flutter_inappwebview.pull_to_refresh.PullToRefreshLayout;
 import com.pichillilorenzo.flutter_inappwebview.types.ContentWorld;
+import com.pichillilorenzo.flutter_inappwebview.types.DownloadStartRequest;
+import com.pichillilorenzo.flutter_inappwebview.types.InAppWebViewInterface;
 import com.pichillilorenzo.flutter_inappwebview.types.PluginScript;
 import com.pichillilorenzo.flutter_inappwebview.types.PreferredContentModeOptionType;
 import com.pichillilorenzo.flutter_inappwebview.types.URLRequest;
@@ -99,7 +102,7 @@ import okhttp3.OkHttpClient;
 import static android.content.Context.INPUT_METHOD_SERVICE;
 import static com.pichillilorenzo.flutter_inappwebview.types.PreferredContentModeOptionType.fromValue;
 
-final public class InAppWebView extends InputAwareWebView {
+final public class InAppWebView extends InputAwareWebView implements InAppWebViewInterface {
 
   static final String LOG_TAG = "InAppWebView";
 
@@ -129,7 +132,7 @@ final public class InAppWebView extends InputAwareWebView {
   public LinearLayout floatingContextMenu = null;
   @Nullable
   public Map<String, Object> contextMenu = null;
-  public Handler headlessHandler = new Handler(Looper.getMainLooper());
+  public Handler mainLooperHandler = new Handler(getWebViewLooper());
   static Handler mHandler = new Handler();
 
   public Runnable checkScrollStoppedTask;
@@ -145,6 +148,7 @@ final public class InAppWebView extends InputAwareWebView {
   public Map<String, ValueCallback<String>> evaluateJavaScriptContentWorldCallbacks = new HashMap<>();
 
   public Map<String, WebMessageChannel> webMessageChannels = new HashMap<>();
+  public List<WebMessageListener> webMessageListeners = new ArrayList<>();
 
   public InAppWebView(Context context) {
     super(context);
@@ -171,12 +175,9 @@ final public class InAppWebView extends InputAwareWebView {
     this.options = options;
     this.contextMenu = contextMenu;
     this.userContentController.addUserOnlyScripts(userScripts);
-    plugin.activity.registerForContextMenu(this);
-  }
-
-  @Override
-  public void reload() {
-    super.reload();
+    if (plugin != null && plugin.activity != null) {
+      plugin.activity.registerForContextMenu(this);
+    }
   }
 
   public void prepare() {
@@ -400,7 +401,7 @@ final public class InAppWebView extends InputAwareWebView {
           onScrollStopped();
         } else {
           initialPositionScrollStoppedTask = getScrollY();
-          headlessHandler.postDelayed(checkScrollStoppedTask, newCheckScrollStoppedTask);
+          mainLooperHandler.postDelayed(checkScrollStoppedTask, newCheckScrollStoppedTask);
         }
       }
     };
@@ -418,7 +419,7 @@ final public class InAppWebView extends InputAwareWebView {
                     hideContextMenu();
                   }
                 } else {
-                  headlessHandler.postDelayed(checkContextMenuShouldBeClosedTask, newCheckContextMenuShouldBeClosedTaskTask);
+                  mainLooperHandler.postDelayed(checkContextMenuShouldBeClosedTask, newCheckContextMenuShouldBeClosedTaskTask);
                 }
               }
             });
@@ -471,11 +472,9 @@ final public class InAppWebView extends InputAwareWebView {
     setOnLongClickListener(new OnLongClickListener() {
       @Override
       public boolean onLongClick(View v) {
-        HitTestResult hitTestResult = getHitTestResult();
-        Map<String, Object> obj = new HashMap<>();
-        obj.put("type", hitTestResult.getType());
-        obj.put("extra", hitTestResult.getExtra());
-        channel.invokeMethod("onLongPressHitTestResult", obj);
+        com.pichillilorenzo.flutter_inappwebview.types.HitTestResult hitTestResult =
+                com.pichillilorenzo.flutter_inappwebview.types.HitTestResult.fromWebViewHitTestResult(getHitTestResult());
+        channel.invokeMethod("onLongPressHitTestResult", hitTestResult.toMap());
         return false;
       }
     });
@@ -540,6 +539,10 @@ final public class InAppWebView extends InputAwareWebView {
   }
 
   public void loadFile(String assetFilePath) throws IOException {
+    if (plugin == null) {
+      return;
+    }
+    
     loadUrl(Util.getUrlAsset(plugin, assetFilePath));
   }
 
@@ -570,12 +573,12 @@ final public class InAppWebView extends InputAwareWebView {
   public void takeScreenshot(final @Nullable Map<String, Object> screenshotConfiguration, final MethodChannel.Result result) {
     final float pixelDensity = Util.getPixelDensity(getContext());
     
-    headlessHandler.post(new Runnable() {
+    mainLooperHandler.post(new Runnable() {
       @Override
       public void run() {
         try {
-          Bitmap resized = Bitmap.createBitmap(getMeasuredWidth(), getMeasuredHeight(), Bitmap.Config.ARGB_8888);
-          Canvas c = new Canvas(resized);
+          Bitmap screenshotBitmap = Bitmap.createBitmap(getMeasuredWidth(), getMeasuredHeight(), Bitmap.Config.ARGB_8888);
+          Canvas c = new Canvas(screenshotBitmap);
           c.translate(-getScrollX(), -getScrollY());
           draw(c);
 
@@ -588,10 +591,10 @@ final public class InAppWebView extends InputAwareWebView {
             if (rect != null) {
               int rectX = (int) Math.floor(rect.get("x") * pixelDensity + 0.5);
               int rectY = (int) Math.floor(rect.get("y") * pixelDensity + 0.5);
-              int rectWidth = Math.min(resized.getWidth(), (int) Math.floor(rect.get("width") * pixelDensity + 0.5));
-              int rectHeight = Math.min(resized.getHeight(), (int) Math.floor(rect.get("height") * pixelDensity + 0.5));
-              resized = Bitmap.createBitmap(
-                      resized,
+              int rectWidth = Math.min(screenshotBitmap.getWidth(), (int) Math.floor(rect.get("width") * pixelDensity + 0.5));
+              int rectHeight = Math.min(screenshotBitmap.getHeight(), (int) Math.floor(rect.get("height") * pixelDensity + 0.5));
+              screenshotBitmap = Bitmap.createBitmap(
+                      screenshotBitmap,
                       rectX,
                       rectY,
                       rectWidth,
@@ -601,9 +604,9 @@ final public class InAppWebView extends InputAwareWebView {
             Double snapshotWidth = (Double) screenshotConfiguration.get("snapshotWidth");
             if (snapshotWidth != null) {
               int dstWidth = (int) Math.floor(snapshotWidth * pixelDensity + 0.5);
-              float ratioBitmap = (float) resized.getWidth() / (float) resized.getHeight();
+              float ratioBitmap = (float) screenshotBitmap.getWidth() / (float) screenshotBitmap.getHeight();
               int dstHeight = (int) ((float) dstWidth / ratioBitmap);
-              resized = Bitmap.createScaledBitmap(resized, dstWidth, dstHeight, true);
+              screenshotBitmap = Bitmap.createScaledBitmap(screenshotBitmap, dstWidth, dstHeight, true);
             }
 
             try {
@@ -615,7 +618,7 @@ final public class InAppWebView extends InputAwareWebView {
             quality = (Integer) screenshotConfiguration.get("quality");
           }
 
-          resized.compress(
+          screenshotBitmap.compress(
                   compressFormat,
                   quality,
                   byteArrayOutputStream);
@@ -625,7 +628,7 @@ final public class InAppWebView extends InputAwareWebView {
           } catch (IOException e) {
             e.printStackTrace();
           }
-          resized.recycle();
+          screenshotBitmap.recycle();
           result.success(byteArrayOutputStream.toByteArray());
 
         } catch (IllegalArgumentException e) {
@@ -982,7 +985,7 @@ final public class InAppWebView extends InputAwareWebView {
               .replace(PluginScriptsUtil.VAR_RESULT_UUID, resultUuid);
     }
     final String finalScriptToInject = scriptToInject;
-    headlessHandler.post(new Runnable() {
+    mainLooperHandler.post(new Runnable() {
       @Override
       public void run() {
         String scriptToInject = userContentController.generateCodeForScriptEvaluation(finalScriptToInject, contentWorld);
@@ -1062,12 +1065,13 @@ final public class InAppWebView extends InputAwareWebView {
       }
     }
     String jsWrapper = "(function(d) { var script = d.createElement('script'); " + scriptAttributes +
-            " script.src = %s; d.body.appendChild(script); })(document);";
+            " script.src = %s; if (d.body != null) { d.body.appendChild(script); } })(document);";
     injectDeferredObject(urlFile, null, jsWrapper, null);
   }
 
   public void injectCSSCode(String source) {
-    String jsWrapper = "(function(d) { var style = d.createElement('style'); style.innerHTML = %s; d.head.appendChild(style); })(document);";
+    String jsWrapper = "(function(d) { var style = d.createElement('style'); style.innerHTML = %s;" +
+            " if (d.head != null) { d.head.appendChild(style); } })(document);";
     injectDeferredObject(source, null, jsWrapper, null);
   }
 
@@ -1109,7 +1113,7 @@ final public class InAppWebView extends InputAwareWebView {
       }
     }
     String jsWrapper = "(function(d) { var link = d.createElement('link'); link.rel='" + alternateStylesheet + "stylesheet'; link.type='text/css'; " +
-            cssLinkAttributes + " link.href = %s; d.head.appendChild(link); })(document);";
+            cssLinkAttributes + " link.href = %s; if (d.head != null) { d.head.appendChild(link); } })(document);";
     injectDeferredObject(urlFile, null, jsWrapper, null);
   }
 
@@ -1181,10 +1185,17 @@ final public class InAppWebView extends InputAwareWebView {
 
   class DownloadStartListener implements DownloadListener {
     @Override
-    public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
-      Map<String, Object> obj = new HashMap<>();
-      obj.put("url", url);
-      channel.invokeMethod("onDownloadStart", obj);
+    public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
+      DownloadStartRequest downloadStartRequest = new DownloadStartRequest(
+        url,
+        userAgent,
+        contentDisposition,
+        mimeType,
+        contentLength,
+        URLUtil.guessFileName(url, contentDisposition, mimeType),
+        null
+      );
+      channel.invokeMethod("onDownloadStartRequest", downloadStartRequest.toMap());
     }
   }
 
@@ -1207,20 +1218,22 @@ final public class InAppWebView extends InputAwareWebView {
 
   @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
   public void printCurrentPage() {
-    // Get a PrintManager instance
-    PrintManager printManager = (PrintManager) plugin.activity.getSystemService(Context.PRINT_SERVICE);
+    if (plugin != null && plugin.activity != null) {
+      // Get a PrintManager instance
+      PrintManager printManager = (PrintManager) plugin.activity.getSystemService(Context.PRINT_SERVICE);
 
-    if (printManager != null) {
-      String jobName = getTitle() + " Document";
+      if (printManager != null) {
+        String jobName = getTitle() + " Document";
 
-      // Get a printCurrentPage adapter instance
-      PrintDocumentAdapter printAdapter = createPrintDocumentAdapter(jobName);
+        // Get a printCurrentPage adapter instance
+        PrintDocumentAdapter printAdapter = createPrintDocumentAdapter(jobName);
 
-      // Create a printCurrentPage job with name and adapter instance
-      printManager.print(jobName, printAdapter,
-              new PrintAttributes.Builder().build());
-    } else {
-      Log.e(LOG_TAG, "No PrintManager available");
+        // Create a printCurrentPage job with name and adapter instance
+        printManager.print(jobName, printAdapter,
+                new PrintAttributes.Builder().build());
+      } else {
+        Log.e(LOG_TAG, "No PrintManager available");
+      }
     }
   }
 
@@ -1231,11 +1244,9 @@ final public class InAppWebView extends InputAwareWebView {
   }
 
   private void sendOnCreateContextMenuEvent() {
-    HitTestResult hitTestResult = getHitTestResult();
-    Map<String, Object> obj = new HashMap<>();
-    obj.put("type", hitTestResult.getType());
-    obj.put("extra", hitTestResult.getExtra());
-    channel.invokeMethod("onCreateContextMenu", obj);
+    com.pichillilorenzo.flutter_inappwebview.types.HitTestResult hitTestResult =
+            com.pichillilorenzo.flutter_inappwebview.types.HitTestResult.fromWebViewHitTestResult(getHitTestResult());
+    channel.invokeMethod("onCreateContextMenu", hitTestResult.toMap());
   }
 
   private Point contextMenuPoint = new Point(0, 0);
@@ -1302,8 +1313,7 @@ final public class InAppWebView extends InputAwareWebView {
                         public void run() {
                           InputMethodManager imm =
                                   (InputMethodManager) getContext().getSystemService(INPUT_METHOD_SERVICE);
-                          if (imm != null && !imm.isAcceptingText()) {
-
+                          if (containerView != null && imm != null && !imm.isAcceptingText()) {
                             imm.hideSoftInputFromWindow(
                                     containerView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
                           }
@@ -1350,8 +1360,16 @@ final public class InAppWebView extends InputAwareWebView {
     }
 
     Menu actionMenu = actionMode.getMenu();
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      actionMode.hide(3000);
+    }
+    List<MenuItem> defaultMenuItems = new ArrayList<>();
+    for (int i = 0; i < actionMenu.size(); i++) {
+      defaultMenuItems.add(actionMenu.getItem(i));
+    }
+    actionMenu.clear();
+    actionMode.finish();
     if (options.disableContextMenu) {
-      actionMenu.clear();
       return actionMode;
     }
 
@@ -1372,8 +1390,7 @@ final public class InAppWebView extends InputAwareWebView {
     customMenuItems = customMenuItems == null ? new ArrayList<Map<String, Object>>() : customMenuItems;
 
     if (contextMenuOptions.hideDefaultSystemContextMenuItems == null || !contextMenuOptions.hideDefaultSystemContextMenuItems) {
-      for (int i = 0; i < actionMenu.size(); i++) {
-        final MenuItem menuItem = actionMenu.getItem(i);
+      for (final MenuItem menuItem : defaultMenuItems) {
         final int itemId = menuItem.getItemId();
         final String itemTitle = menuItem.getTitle().toString();
 
@@ -1450,7 +1467,6 @@ final public class InAppWebView extends InputAwareWebView {
         checkContextMenuShouldBeClosedTask.run();
       }
     }
-    actionMenu.clear();
 
     return actionMode;
   }
@@ -1477,7 +1493,7 @@ final public class InAppWebView extends InputAwareWebView {
             new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, curx, ((int) cury) + getScrollY())
     );
 
-    headlessHandler.post(new Runnable() {
+    mainLooperHandler.post(new Runnable() {
       @Override
       public void run() {
         if (floatingContextMenu != null) {
@@ -1547,16 +1563,6 @@ final public class InAppWebView extends InputAwareWebView {
       public void onReceiveValue(String value) {
         value = (value != null && !value.equalsIgnoreCase("null")) ? value.substring(1, value.length() - 1) : null;
         resultCallback.onReceiveValue(value);
-      }
-    });
-  }
-
-  @RequiresApi(api = Build.VERSION_CODES.KITKAT)
-  public void getSelectedText(final MethodChannel.Result result) {
-    getSelectedText(new ValueCallback<String>() {
-      @Override
-      public void onReceiveValue(String value) {
-        result.success(value);
       }
     });
   }
@@ -1649,8 +1655,16 @@ final public class InAppWebView extends InputAwareWebView {
     return webMessageChannel;
   }
 
-  public void addWebMessageListener(@NonNull WebMessageListener webMessageListener) {
+  @Override
+  public WebMessageChannel createWebMessageChannel(ValueCallback<WebMessageChannel> callback) {
+    WebMessageChannel webMessageChannel = createCompatWebMessageChannel();
+    callback.onReceiveValue(webMessageChannel);
+    return webMessageChannel;
+  }
+
+  public void addWebMessageListener(@NonNull WebMessageListener webMessageListener) throws Exception {
     WebViewCompat.addWebMessageListener(this, webMessageListener.jsObjectName, webMessageListener.allowedOriginRules, webMessageListener.listener);
+    webMessageListeners.add(webMessageListener);
   }
 
   public void disposeWebMessageChannels() {
@@ -1660,19 +1674,102 @@ final public class InAppWebView extends InputAwareWebView {
     webMessageChannels.clear();
   }
 
-//  @Override
+  public void disposeWebMessageListeners() {
+    for (WebMessageListener webMessageListener : webMessageListeners) {
+      webMessageListener.dispose();
+    }
+    webMessageListeners.clear();
+  }
+
+  @Override
+  public Looper getWebViewLooper() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      return super.getWebViewLooper();
+    }
+    return Looper.getMainLooper();
+  }
+
+  @Override
+  public void postWebMessage(com.pichillilorenzo.flutter_inappwebview.types.WebMessage message, Uri targetOrigin, ValueCallback<String> callback) throws Exception {
+    throw new UnsupportedOperationException();
+  }
+
+  //  @Override
 //  protected void onWindowVisibilityChanged(int visibility) {
 //    if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE);
 //  }
+
+  public float getZoomScale() {
+    return zoomScale;
+  }
+
+  @Override
+  public void getZoomScale(final ValueCallback<Float> callback) {
+    callback.onReceiveValue(zoomScale);
+  }
+
+  @Nullable
+  public Map<String, Object> getContextMenu() {
+    return contextMenu;
+  }
+
+  public void setContextMenu(@Nullable Map<String, Object> contextMenu) {
+    this.contextMenu = contextMenu;
+  }
+
+  @Nullable
+  public InAppWebViewFlutterPlugin getPlugin() {
+    return plugin;
+  }
+
+  public void setPlugin(@Nullable InAppWebViewFlutterPlugin plugin) {
+    this.plugin = plugin;
+  }
+
+  @Nullable
+  public InAppBrowserDelegate getInAppBrowserDelegate() {
+    return inAppBrowserDelegate;
+  }
+
+  public void setInAppBrowserDelegate(@Nullable InAppBrowserDelegate inAppBrowserDelegate) {
+    this.inAppBrowserDelegate = inAppBrowserDelegate;
+  }
+
+  public UserContentController getUserContentController() {
+    return userContentController;
+  }
+
+  public void setUserContentController(UserContentController userContentController) {
+    this.userContentController = userContentController;
+  }
+
+  public Map<String, WebMessageChannel> getWebMessageChannels() {
+    return webMessageChannels;
+  }
+
+  public void setWebMessageChannels(Map<String, WebMessageChannel> webMessageChannels) {
+    this.webMessageChannels = webMessageChannels;
+  }
+
+  @Override
+  public void getContentHeight(ValueCallback<Integer> callback) {
+    callback.onReceiveValue(getContentHeight());
+  }
+
+  @Override
+  public void getHitTestResult(ValueCallback<com.pichillilorenzo.flutter_inappwebview.types.HitTestResult> callback) {
+    callback.onReceiveValue(com.pichillilorenzo.flutter_inappwebview.types.HitTestResult.fromWebViewHitTestResult(getHitTestResult()));
+  }
 
   @Override
   public void dispose() {
     if (windowId != null) {
       InAppWebViewChromeClient.windowWebViewMessages.remove(windowId);
     }
-    headlessHandler.removeCallbacksAndMessages(null);
+    mainLooperHandler.removeCallbacksAndMessages(null);
     mHandler.removeCallbacksAndMessages(null);
     disposeWebMessageChannels();
+    disposeWebMessageListeners();
     removeAllViews();
     if (checkContextMenuShouldBeClosedTask != null)
       removeCallbacks(checkContextMenuShouldBeClosedTask);
