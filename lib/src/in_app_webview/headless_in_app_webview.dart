@@ -53,6 +53,7 @@ class HeadlessInAppWebView implements WebView {
       this.contextMenu,
       this.initialUserScripts,
       this.pullToRefreshController,
+      this.implementation = WebViewImplementation.NATIVE,
       this.onWebViewCreated,
       this.onLoadStart,
       this.onLoadStop,
@@ -63,7 +64,9 @@ class HeadlessInAppWebView implements WebView {
       this.shouldOverrideUrlLoading,
       this.onLoadResource,
       this.onScrollChanged,
-      this.onDownloadStart,
+      @Deprecated('Use `onDownloadStartRequest` instead')
+          this.onDownloadStart,
+      this.onDownloadStartRequest,
       this.onLoadResourceCustomScheme,
       this.onCreateWindow,
       this.onCloseWindow,
@@ -140,14 +143,13 @@ class HeadlessInAppWebView implements WebView {
     args.putIfAbsent(
         'params',
         () => <String, dynamic>{
-              'initialUrlRequest': (this.initialUrlRequest ??
-                      URLRequest(url: Uri.parse("about:blank")))
-                  .toMap(),
+              'initialUrlRequest': this.initialUrlRequest?.toMap(),
               'initialFile': this.initialFile,
               'initialData': this.initialData?.toMap(),
               'initialOptions': this.initialOptions?.toMap() ?? {},
               'contextMenu': this.contextMenu?.toMap() ?? {},
               'windowId': this.windowId,
+              'implementation': this.implementation.toValue(),
               'initialUserScripts':
                   this.initialUserScripts?.map((e) => e.toMap()).toList() ?? [],
               'pullToRefreshOptions':
@@ -229,6 +231,9 @@ class HeadlessInAppWebView implements WebView {
   final PullToRefreshController? pullToRefreshController;
 
   @override
+  final WebViewImplementation implementation;
+
+  @override
   void Function(InAppWebViewController controller)?
       androidOnGeolocationPermissionsHidePrompt;
 
@@ -299,8 +304,15 @@ class HeadlessInAppWebView implements WebView {
   @override
   void Function(InAppWebViewController controller)? onWindowBlur;
 
+  ///Use [onDownloadStartRequest] instead
+  @Deprecated('Use `onDownloadStartRequest` instead')
   @override
-  void Function(InAppWebViewController controller, Uri url)? onDownloadStart;
+  final void Function(InAppWebViewController controller, Uri url)?
+      onDownloadStart;
+
+  @override
+  final void Function(InAppWebViewController controller,
+      DownloadStartRequest downloadStartRequest)? onDownloadStartRequest;
 
   @override
   void Function(InAppWebViewController controller, int activeMatchOrdinal,

@@ -3,18 +3,25 @@ package com.pichillilorenzo.flutter_inappwebview.chrome_custom_tabs;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 
+import androidx.annotation.Nullable;
+import androidx.browser.customtabs.CustomTabColorSchemeParams;
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsService;
 import androidx.browser.customtabs.CustomTabsSession;
 
 import com.pichillilorenzo.flutter_inappwebview.R;
+import com.pichillilorenzo.flutter_inappwebview.types.CustomTabsActionButton;
+import com.pichillilorenzo.flutter_inappwebview.types.CustomTabsMenuItem;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +41,12 @@ public class ChromeCustomTabsActivity extends Activity implements MethodChannel.
   protected final int CHROME_CUSTOM_TAB_REQUEST_CODE = 100;
   protected boolean onChromeSafariBrowserOpened = false;
   protected boolean onChromeSafariBrowserCompletedInitialLoad = false;
+  @Nullable
   public ChromeSafariBrowserManager manager;
+  public String initialUrl;
+  public List<CustomTabsMenuItem> menuItems = new ArrayList<>();
+  @Nullable
+  public CustomTabsActionButton actionButton;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -43,7 +55,8 @@ public class ChromeCustomTabsActivity extends Activity implements MethodChannel.
     setContentView(R.layout.chrome_custom_tabs_layout);
 
     Bundle b = getIntent().getExtras();
-    assert b != null;
+    if (b == null) return;
+    
     id = b.getString("id");
 
     String managerId = b.getString("managerId");
@@ -52,30 +65,23 @@ public class ChromeCustomTabsActivity extends Activity implements MethodChannel.
     channel = new MethodChannel(manager.plugin.messenger, "com.pichillilorenzo/flutter_chromesafaribrowser_" + id);
     channel.setMethodCallHandler(this);
 
-    final String url = b.getString("url");
+    initialUrl = b.getString("url");
 
     options = new ChromeCustomTabsOptions();
-    options.parse((HashMap<String, Object>) b.getSerializable("options"));
-
-    final List<HashMap<String, Object>> menuItemList = (List<HashMap<String, Object>>) b.getSerializable("menuItemList");
-
+    options.parse((Map<String, Object>) b.getSerializable("options"));
+    actionButton = CustomTabsActionButton.fromMap((Map<String, Object>) b.getSerializable("actionButton"));
+    List<Map<String, Object>> menuItemList = (List<Map<String, Object>>) b.getSerializable("menuItemList");
+    for (Map<String, Object> menuItem : menuItemList) {
+      menuItems.add(CustomTabsMenuItem.fromMap(menuItem));
+    }
+    
     final ChromeCustomTabsActivity chromeCustomTabsActivity = this;
 
     customTabActivityHelper = new CustomTabActivityHelper();
     customTabActivityHelper.setConnectionCallback(new CustomTabActivityHelper.ConnectionCallback() {
       @Override
       public void onCustomTabsConnected() {
-        customTabsSession = customTabActivityHelper.getSession();
-        Uri uri = Uri.parse(url);
-        customTabActivityHelper.mayLaunchUrl(uri, null, null);
-
-        builder = new CustomTabsIntent.Builder(customTabsSession);
-        prepareCustomTabs(menuItemList);
-
-        CustomTabsIntent customTabsIntent = builder.build();
-        prepareCustomTabsIntent(customTabsIntent);
-
-        CustomTabActivityHelper.openCustomTab(chromeCustomTabsActivity, customTabsIntent, uri, CHROME_CUSTOM_TAB_REQUEST_CODE);
+        customTabsConnected();
       }
 
       @Override
@@ -132,11 +138,13 @@ public class ChromeCustomTabsActivity extends Activity implements MethodChannel.
         this.onDestroy();
         this.close();
 
-        // https://stackoverflow.com/a/41596629/4637638
-        Intent myIntent = new Intent(manager.plugin.activity, manager.plugin.activity.getClass());
-        myIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        myIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        manager.plugin.activity.startActivity(myIntent);
+        if (manager != null && manager.plugin != null && manager.plugin.activity != null) {
+          // https://stackoverflow.com/a/41596629/4637638
+          Intent myIntent = new Intent(manager.plugin.activity, manager.plugin.activity.getClass());
+          myIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+          myIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+          manager.plugin.activity.startActivity(myIntent);
+        }
 
         dispose();
         
@@ -147,24 +155,54 @@ public class ChromeCustomTabsActivity extends Activity implements MethodChannel.
     }
   }
 
-  private void prepareCustomTabs(List<HashMap<String, Object>> menuItemList) {
-    if (options.addDefaultShareMenuItem)
-      builder.addDefaultShareMenuItem();
+  public void customTabsConnected() {
+    customTabsSession = customTabActivityHelper.getSession();
+    Uri uri = Uri.parse(initialUrl);
+    customTabActivityHelper.mayLaunchUrl(uri, null, null);
 
-    if (options.toolbarBackgroundColor != null && !options.toolbarBackgroundColor.isEmpty())
-      builder.setToolbarColor(Color.parseColor(options.toolbarBackgroundColor));
+    builder = new CustomTabsIntent.Builder(customTabsSession);
+    prepareCustomTabs();
+
+    CustomTabsIntent customTabsIntent = builder.build();
+    prepareCustomTabsIntent(customTabsIntent);
+
+    CustomTabActivityHelper.openCustomTab(this, customTabsIntent, uri, CHROME_CUSTOM_TAB_REQUEST_CODE);
+  }
+
+  private void prepareCustomTabs() {
+    if (options.addDefaultShareMenuItem != null) {
+      builder.setShareState(options.addDefaultShareMenuItem ?
+              CustomTabsIntent.SHARE_STATE_ON : CustomTabsIntent.SHARE_STATE_OFF);
+    } else {
+      builder.setShareState(options.shareState);
+    }
+
+    if (options.toolbarBackgroundColor != null && !options.toolbarBackgroundColor.isEmpty()) {
+      CustomTabColorSchemeParams.Builder defaultColorSchemeBuilder = new CustomTabColorSchemeParams.Builder();
+      builder.setDefaultColorSchemeParams(defaultColorSchemeBuilder
+              .setToolbarColor(Color.parseColor(options.toolbarBackgroundColor))
+              .build());
+    }
 
     builder.setShowTitle(options.showTitle);
-
-    if (options.enableUrlBarHiding)
-      builder.enableUrlBarHiding();
-
+    builder.setUrlBarHidingEnabled(options.enableUrlBarHiding);
     builder.setInstantAppsEnabled(options.instantAppsEnabled);
 
-    for (HashMap<String, Object> menuItem : menuItemList) {
-      int id = (int) menuItem.get("id");
-      String label = (String) menuItem.get("label");
-      builder.addMenuItem(label, createPendingIntent(id));
+    for (CustomTabsMenuItem menuItem : menuItems) {
+      builder.addMenuItem(menuItem.getLabel(), 
+              createPendingIntent(menuItem.getId()));
+    }
+
+    if (actionButton != null) {
+      byte[] data = actionButton.getIcon();
+      BitmapFactory.Options bitmapOptions = new BitmapFactory.Options();
+      bitmapOptions.inMutable = true;
+      Bitmap bmp = BitmapFactory.decodeByteArray(
+              data, 0, data.length, bitmapOptions
+      );
+      builder.setActionButton(bmp, actionButton.getDescription(),
+              createPendingIntent(actionButton.getId()),
+              actionButton.isShouldTint());
     }
   }
 
@@ -207,8 +245,13 @@ public class ChromeCustomTabsActivity extends Activity implements MethodChannel.
     extras.putString(ActionBroadcastReceiver.CHROME_MANAGER_ID, manager.id);
     actionIntent.putExtras(extras);
 
-    return PendingIntent.getBroadcast(
-            this, actionSourceId, actionIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+    if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      return PendingIntent.getBroadcast(
+              this, actionSourceId, actionIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+    } else {
+      return PendingIntent.getBroadcast(
+              this, actionSourceId, actionIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+    }
   }
 
   public void dispose() {
