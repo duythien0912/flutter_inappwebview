@@ -49,18 +49,26 @@ public class InAppBrowserActivity extends AppCompatActivity implements InAppBrow
   public MethodChannel channel;
   public Integer windowId;
   public String id;
+  @Nullable
   public InAppWebView webView;
+  @Nullable
   public PullToRefreshLayout pullToRefreshLayout;
   @Nullable
   public ActionBar actionBar;
+  @Nullable
   public Menu menu;
+  @Nullable
   public SearchView searchView;
-  public InAppBrowserOptions options;
+  public InAppBrowserOptions options = new InAppBrowserOptions();
+  @Nullable
   public ProgressBar progressBar;
   public boolean isHidden = false;
+  @Nullable
   public String fromActivity;
   private List<ActivityResultListener> activityResultListeners = new ArrayList<>();
+  @Nullable
   public InAppWebViewMethodHandler methodCallDelegate;
+  @Nullable
   public InAppBrowserManager manager;
   
   @Override
@@ -73,8 +81,12 @@ public class InAppBrowserActivity extends AppCompatActivity implements InAppBrow
     id = b.getString("id");
 
     String managerId = b.getString("managerId");
-    manager = (InAppBrowserManager) InAppBrowserManager.shared.get(managerId);
-    
+    manager = InAppBrowserManager.shared.get(managerId);
+    if (manager == null || manager.plugin == null|| manager.plugin.messenger == null) return;
+
+    Map<String, Object> optionsMap = (Map<String, Object>) b.getSerializable("options");
+    options.parse(optionsMap);
+
     windowId = b.getInt("windowId");
 
     channel = new MethodChannel(manager.plugin.messenger, "com.pichillilorenzo/flutter_inappbrowser_" + id);
@@ -101,12 +113,8 @@ public class InAppBrowserActivity extends AppCompatActivity implements InAppBrow
 
     fromActivity = b.getString("fromActivity");
 
-    Map<String, Object> optionsMap = (Map<String, Object>) b.getSerializable("options");
     Map<String, Object> contextMenu = (Map<String, Object>) b.getSerializable("contextMenu");
     List<Map<String, Object>> initialUserScripts = (List<Map<String, Object>>) b.getSerializable("initialUserScripts");
-
-    options = new InAppBrowserOptions();
-    options.parse(optionsMap);
 
     InAppWebViewOptions webViewOptions = new InAppWebViewOptions();
     webViewOptions.parse(optionsMap);
@@ -199,58 +207,69 @@ public class InAppBrowserActivity extends AppCompatActivity implements InAppBrow
   public boolean onCreateOptionsMenu(Menu m) {
     menu = m;
 
+    if (actionBar != null && (options.toolbarTopFixedTitle == null || options.toolbarTopFixedTitle.isEmpty()))
+      actionBar.setTitle(webView != null ? webView.getTitle() : "");
+
+    if (menu == null)
+      return super.onCreateOptionsMenu(m);
+
     MenuInflater inflater = getMenuInflater();
     // Inflate menu to add items to action bar if it is present.
     inflater.inflate(R.menu.menu_main, menu);
 
-    searchView = (SearchView) menu.findItem(R.id.menu_search).getActionView();
-    searchView.setFocusable(true);
+    MenuItem menuItem = menu.findItem(R.id.menu_search);
+    if (menuItem != null) {
+      if (options.hideUrlBar)
+        menuItem.setVisible(false);
 
-    if (options.hideUrlBar)
-      menu.findItem(R.id.menu_search).setVisible(false);
+      searchView = (SearchView) menuItem.getActionView();
+      if (searchView != null) {
+        searchView.setFocusable(true);
 
-    searchView.setQuery(webView.getUrl(), false);
+        searchView.setQuery(webView != null ? webView.getUrl() : "", false);
 
-    if (actionBar != null && (options.toolbarTopFixedTitle == null || options.toolbarTopFixedTitle.isEmpty()))
-      actionBar.setTitle(webView.getTitle());
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+          @Override
+          public boolean onQueryTextSubmit(String query) {
+            if (!query.isEmpty()) {
+              if (webView != null)
+                webView.loadUrl(query);
+              if (searchView != null) {
+                searchView.setQuery("", false);
+                searchView.setIconified(true);
+              }
+              return true;
+            }
+            return false;
+          }
 
-    searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-      @Override
-      public boolean onQueryTextSubmit(String query) {
-        if (!query.isEmpty()) {
-          webView.loadUrl(query);
-          searchView.setQuery("", false);
-          searchView.setIconified(true);
-          return true;
-        }
-        return false;
-      }
+          @Override
+          public boolean onQueryTextChange(String newText) {
+            return false;
+          }
 
-      @Override
-      public boolean onQueryTextChange(String newText) {
-        return false;
-      }
+        });
 
-    });
+        searchView.setOnCloseListener(new SearchView.OnCloseListener() {
+          @Override
+          public boolean onClose() {
+            if (searchView != null && searchView.getQuery().toString().isEmpty())
+              searchView.setQuery(webView != null ? webView.getUrl() : "", false);
+            return false;
+          }
+        });
 
-    searchView.setOnCloseListener(new SearchView.OnCloseListener() {
-      @Override
-      public boolean onClose() {
-        if (searchView.getQuery().toString().isEmpty())
-          searchView.setQuery(webView.getUrl(), false);
-        return false;
-      }
-    });
-
-    searchView.setOnQueryTextFocusChangeListener(new View.OnFocusChangeListener() {
-      @Override
-      public void onFocusChange(View view, boolean b) {
-        if (!b) {
-          searchView.setQuery("", false);
-          searchView.setIconified(true);
-        }
-      }
-    });
+        searchView.setOnQueryTextFocusChangeListener(new View.OnFocusChangeListener() {
+          @Override
+          public void onFocusChange(View view, boolean b) {
+            if (!b && searchView != null) {
+              searchView.setQuery("", false);
+              searchView.setIconified(true);
+            }
+          }
+        });
+      } 
+    }
 
     return true;
   }
@@ -500,7 +519,7 @@ public class InAppBrowserActivity extends AppCompatActivity implements InAppBrow
       methodCallDelegate = null;
     }
     if (webView != null) {
-      if (manager.plugin.activityPluginBinding != null) {
+      if (manager != null && manager.plugin != null && manager.plugin.activityPluginBinding != null) {
         manager.plugin.activityPluginBinding.removeActivityResultListener(webView.inAppWebViewChromeClient);
       }
       ViewGroup vg = (ViewGroup) (webView.getParent());

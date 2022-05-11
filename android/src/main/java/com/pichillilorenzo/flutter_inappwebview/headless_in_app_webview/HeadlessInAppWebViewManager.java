@@ -64,10 +64,11 @@ public class HeadlessInAppWebViewManager implements MethodChannel.MethodCallHand
       default:
         result.notImplemented();
     }
-
   }
 
   public void run(String id, HashMap<String, Object> params) {
+    if (plugin == null || plugin.activity == null) return;
+
     FlutterWebView flutterWebView = new FlutterWebView(plugin, plugin.activity, id, params);
     HeadlessInAppWebView headlessInAppWebView = new HeadlessInAppWebView(plugin, id, flutterWebView);
     HeadlessInAppWebViewManager.webViews.put(id, headlessInAppWebView);
@@ -81,7 +82,9 @@ public class HeadlessInAppWebViewManager implements MethodChannel.MethodCallHand
     channel.setMethodCallHandler(null);
     Collection<HeadlessInAppWebView> headlessInAppWebViews = webViews.values();
     for (HeadlessInAppWebView headlessInAppWebView : headlessInAppWebViews) {
-      headlessInAppWebView.dispose();
+      if (headlessInAppWebView != null) {
+        headlessInAppWebView.dispose();
+      }
     }
     webViews.clear();
   }
